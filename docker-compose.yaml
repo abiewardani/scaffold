@@ -1,0 +1,34 @@
+version: '3.7'
+services:
+  api:
+    restart: on-failure
+    depends_on:
+      - db
+    links:
+      - db
+    build:
+      context: .
+    ports:
+      - 3001:3001
+    networks:
+      - backend
+
+  db:
+    restart: always
+    image: postgres
+    hostname: db
+    ports:
+      - '5432:5432'
+    expose:
+      - 5432
+    environment:
+        - POSTGRES_DB=scaffold
+        - POSTGRES_USER=username
+        - POSTGRES_PASSWORD=password
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+

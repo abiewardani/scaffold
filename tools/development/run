@@ -1,0 +1,6 @@
+CompileDaemon \
+    -build="go build -o /opt/service/build/service_bin /opt/service/cmd/main.go" \
+    -directory="./cmd" \
+    -directory="./internal" \
+    -directory="./tools" \
+    -command="./build/service_bin"
