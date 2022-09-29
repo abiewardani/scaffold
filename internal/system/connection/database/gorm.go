@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -25,13 +26,46 @@ func (g *gormInstance) Slave() *gorm.DB {
 	return g.slave
 }
 
-func (g *gormInstance) Close() {}
+// Master initialize DB for master data with context
+func (g *gormInstance) MasterWithCtx(ctx context.Context) *gorm.DB {
+	if tx := g.GetTx(ctx); tx != nil {
+		return tx
+	}
+	return g.master
+}
 
+// Slave initialize DB for slave data with context
+func (g *gormInstance) SlaveWithCtx(ctx context.Context) *gorm.DB {
+	if tx := g.GetTx(ctx); tx != nil {
+		return tx
+	}
+	return g.slave
+}
+
+type txKey struct{}
+
+// Add Tx to context
+func (g *gormInstance) AddTx(ctx context.Context, tx *gorm.DB) context.Context {
+	return context.WithValue(ctx, txKey{}, tx)
+}
+
+// Get Tx from context
+func (g *gormInstance) GetTx(ctx context.Context) *gorm.DB {
+	if tx, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
+		return tx
+	}
+	return nil
+}
+
+// GormDatabase abstraction
 // GormDatabase abstraction
 type GormDatabase interface {
 	Master() *gorm.DB
 	Slave() *gorm.DB
-	Close()
+	AddTx(ctx context.Context, tx *gorm.DB) context.Context
+	GetTx(ctx context.Context) *gorm.DB
+	MasterWithCtx(ctx context.Context) *gorm.DB
+	SlaveWithCtx(ctx context.Context) *gorm.DB
 }
 
 // InitGorm ...

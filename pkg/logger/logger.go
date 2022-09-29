@@ -1,96 +1,108 @@
 package logger
 
 import (
-	"fmt"
-	"github.com/rs/zerolog"
-	"os"
-	"strings"
+	"runtime"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-// Interface -.
-type Interface interface {
-	Debug(message interface{}, args ...interface{})
-	Info(message string, args ...interface{})
-	Warn(message string, args ...interface{})
-	Error(message interface{}, args ...interface{})
-	Fatal(message interface{}, args ...interface{})
-}
+var logger *zap.SugaredLogger
 
-// Logger -.
-type Logger struct {
-	logger *zerolog.Logger
-}
+// InitZap logger
+func InitZap() {
+	var (
+		logg *zap.Logger
+		err  error
+	)
 
-var _ Interface = (*Logger)(nil)
+	cfg := zap.Config{
+		Encoding:         "json",
+		OutputPaths:      []string{"stderr"},
+		ErrorOutputPaths: []string{"stderr"},
+		EncoderConfig: zapcore.EncoderConfig{
+			MessageKey: "message",
 
-// New -.
-func New(level string) *Logger {
-	var l zerolog.Level
+			LevelKey:    "level",
+			EncodeLevel: zapcore.CapitalLevelEncoder,
 
-	switch strings.ToLower(level) {
-	case "error":
-		l = zerolog.ErrorLevel
-	case "warn":
-		l = zerolog.WarnLevel
-	case "info":
-		l = zerolog.InfoLevel
-	case "debug":
-		l = zerolog.DebugLevel
-	default:
-		l = zerolog.InfoLevel
+			TimeKey:    "time",
+			EncodeTime: zapcore.ISO8601TimeEncoder,
+
+			CallerKey: "caller",
+			EncodeCaller: func(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) {
+				_, caller.File, caller.Line, _ = runtime.Caller(7)
+				enc.AppendString(caller.FullPath())
+			},
+		},
 	}
 
-	zerolog.SetGlobalLevel(l)
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	cfg.Development = true
 
-	skipFrameCount := 3
-	logger := zerolog.New(os.Stdout).With().Timestamp().CallerWithSkipFrameCount(zerolog.CallerSkipFrameCount + skipFrameCount).Logger()
-
-	return &Logger{
-		logger: &logger,
+	logg, err = cfg.Build()
+	if err != nil {
+		panic(err)
 	}
+	defer logg.Sync()
+
+	// define logger
+	logger = logg.Sugar()
 }
 
-func (l Logger) Debug(message interface{}, args ...interface{}) {
-	l.msg("debug", message, args...)
-}
+// Log func
+func Log(level zapcore.Level, message string, context string, scope string) {
+	entry := logger.With(
+		zap.String("context", context),
+		zap.String("scope", scope),
+	)
 
-func (l Logger) Info(message string, args ...interface{}) {
-	l.log(message, args...)
-}
-
-func (l Logger) Warn(message string, args ...interface{}) {
-	l.log(message, args...)
-}
-
-func (l Logger) Error(message interface{}, args ...interface{}) {
-	if l.logger.GetLevel() == zerolog.DebugLevel {
-		l.Debug(message, args...)
-	}
-
-	l.msg("error", message, args...)
-}
-
-func (l Logger) Fatal(message interface{}, args ...interface{}) {
-	l.msg("fatal", message, args...)
-
-	os.Exit(1)
-}
-
-func (l *Logger) log(message string, args ...interface{}) {
-	if len(args) == 0 {
-		l.logger.Info().Msg(message)
-	} else {
-		l.logger.Info().Msgf(message, args...)
+	switch level {
+	case zapcore.DebugLevel:
+		entry.Debug(message)
+	case zapcore.InfoLevel:
+		entry.Info(message)
+	case zapcore.WarnLevel:
+		entry.Warn(message)
+	case zapcore.ErrorLevel:
+		entry.Error(message)
+	case zapcore.FatalLevel:
+		entry.Fatal(message)
+	case zapcore.PanicLevel:
+		entry.Panic(message)
 	}
 }
 
-func (l *Logger) msg(level string, message interface{}, args ...interface{}) {
-	switch msg := message.(type) {
-	case error:
-		l.log(msg.Error(), args...)
-	case string:
-		l.log(msg, args...)
-	default:
-		l.log(fmt.Sprintf("%s message %v has unknown type %v", level, message, msg), args...)
-	}
+// LogE error
+func E(message interface{}) {
+	logger.Error(message)
+}
+
+// LogEf error with format
+func Ef(format string, i ...interface{}) {
+	logger.Errorf(format, i...)
+}
+
+// LogI info
+func I(message ...interface{}) {
+	logger.Info(message...)
+}
+
+// LogIf info with format
+func If(format string, i ...interface{}) {
+	logger.Infof(format, i...)
+}
+
+// LogD info
+func D(message ...interface{}) {
+	logger.Debug(message...)
+}
+
+// DF info with format
+func DF(format string, i ...interface{}) {
+	logger.Debugf(format, i...)
+}
+
+func Panic(i ...interface{}) {
+	logger.Panic(i)
 }
